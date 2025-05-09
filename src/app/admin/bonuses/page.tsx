@@ -2,13 +2,13 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { getBonuses, deleteBonus } from './_actions'; // Assuming getBonuses is here
+import { getBonuses } from './_actions'; 
 import type { Bonus } from '@/schemas/bonus';
-import { PlusCircle, Edit, Trash2, ExternalLink, CheckCircle2, XCircle } from 'lucide-react';
+import { PlusCircle, Edit, ExternalLink, CheckCircle2, XCircle, Gift } from 'lucide-react'; // Added Gift
 import { Badge } from '@/components/ui/badge';
-import DeleteBonusButton from './_components/delete-bonus-button'; // Client component for confirm dialog
+import DeleteBonusButton from './_components/delete-bonus-button'; 
 
-export const dynamic = 'force-dynamic'; // Ensure fresh data on each request
+export const dynamic = 'force-dynamic'; 
 
 export default async function BonusesPage() {
   const bonuses: Bonus[] = await getBonuses();
