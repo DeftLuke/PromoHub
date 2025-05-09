@@ -1,17 +1,15 @@
-
 'use server';
 
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { bonusSchema, BonusFormData, Bonus } from '@/schemas/bonus';
-import clientPromise, { toObjectId, DB_NAME } from '@/lib/mongodb'; // Import DB_NAME
-import type { Collection, ObjectId } from 'mongodb';
+import clientPromise, { toObjectId, DB_NAME, ObjectId } from '@/lib/mongodb';
+import type { Collection, ObjectId as RealObjectIdType } from 'mongodb';
 
-// const DB_NAME = process.env.MONGODB_DB_NAME; // Replaced by import
 const BONUSES_COLLECTION = process.env.BONUSES_COLLECTION_NAME || 'bonuses';
 
-async function getBonusesCollection(): Promise<Collection<Omit<Bonus, '_id' | 'createdAt' | 'updatedAt'> & { _id: ObjectId; createdAt: Date; updatedAt: Date }>> {
-  if (!DB_NAME) { // DB_NAME is now imported and will have a default if mock is used
+async function getBonusesCollection(): Promise<Collection<Omit<Bonus, '_id' | 'createdAt' | 'updatedAt'> & { _id: RealObjectIdType | string; createdAt: Date; updatedAt: Date }>> {
+  if (!DB_NAME) {
     throw new Error('MongoDB DB_NAME is not configured.');
   }
   const client = await clientPromise;
@@ -36,18 +34,35 @@ export async function createBonus(data: BonusFormData): Promise<BonusActionState
     const collection = await getBonusesCollection();
     const newBonusDocument = {
       ...validatedFields.data,
+      // The imported ObjectId handles mock (string) vs real (ObjectId instance)
       _id: new ObjectId(), 
       createdAt: new Date(),
       updatedAt: new Date(),
     };
     
+    // The 'as any' here is because the mock collection's _id might be string while real is ObjectId.
+    // The document structure itself matches Bonus (omitting the _id type part handled by new ObjectId()).
     const result = await collection.insertOne(newBonusDocument as any); 
 
     revalidatePath('/admin/bonuses');
     revalidatePath('/'); 
     revalidatePath('/promotions');
 
-    return { success: true, message: 'Bonus created successfully.', bonusId: result.insertedId.toHexString() };
+    let bonusIdString: string;
+    const insertedIdValue = result.insertedId;
+
+    if (typeof insertedIdValue === 'string') {
+        // Mock path: insertedIdValue is already a string
+        bonusIdString = insertedIdValue;
+    } else if (insertedIdValue && typeof (insertedIdValue as RealObjectIdType).toHexString === 'function') {
+        // Real MongoDB path: insertedIdValue is an ObjectId instance
+        bonusIdString = (insertedIdValue as RealObjectIdType).toHexString();
+    } else {
+        console.error("Unexpected insertedId type from MongoDB:", insertedIdValue);
+        throw new Error("Failed to correctly process bonus ID after creation.");
+    }
+
+    return { success: true, message: 'Bonus created successfully.', bonusId: bonusIdString };
   } catch (e) {
     console.error('Failed to create bonus:', e);
     let errorMessage = 'Failed to create bonus due to a server issue.';
@@ -79,7 +94,7 @@ export async function updateBonus(id: string, data: BonusFormData): Promise<Bonu
 
   try {
     const collection = await getBonusesCollection();
-    const bonusObjectId = toObjectId(id);
+    const bonusObjectId = toObjectId(id); // Handles conversion to ObjectId for real DB, string for mock
 
     if (!bonusObjectId) {
       console.error(`Invalid bonus ID format for update: ${id}`);
@@ -91,11 +106,13 @@ export async function updateBonus(id: string, data: BonusFormData): Promise<Bonu
       updatedAt: new Date(),
     };
 
+    // Remove _id and createdAt from $set if they accidentally got in from validatedFields.data
+    // (though bonusSchema doesn't include them, so this is defensive)
     const {_id, createdAt, ...setValues} = updateData as any;
 
 
     const result = await collection.updateOne(
-      { _id: bonusObjectId },
+      { _id: bonusObjectId }, // Use the converted ObjectId or string ID
       { $set: setValues }
     );
 
@@ -164,16 +181,15 @@ export async function deleteBonus(id: string): Promise<BonusActionState> {
 export async function getBonuses(): Promise<Bonus[]> {
   try {
     const collection = await getBonusesCollection();
-    // The mock implementation's find returns a MockCursor which has sort.
-    // The real MongoDB find also returns a cursor with sort.
     const bonusesFromDB = await collection.find({}).sort({ createdAt: -1 }).toArray();
     
     return bonusesFromDB.map(bonus => ({
       ...bonus,
-      _id: bonus._id.toHexString ? bonus._id.toHexString() : String(bonus._id), // Handle mock _id (string) and real _id (ObjectId)
+      // Ensure _id is always a string for the Bonus type, whether from mock (string) or real (ObjectId)
+      _id: typeof bonus._id === 'string' ? bonus._id : bonus._id.toHexString(),
       createdAt: new Date(bonus.createdAt), 
       updatedAt: new Date(bonus.updatedAt), 
-    })) as unknown as Bonus[]; 
+    })) as unknown as Bonus[]; // Cast needed because Bonus _id is string, DB _id is ObjectId | string
   } catch (e) {
     console.error('Failed to fetch bonuses:', e);
     return [];
@@ -197,14 +213,13 @@ export async function getBonusById(id: string): Promise<Bonus | null> {
     }
 
     return {
-      ...bonusFromDB,
-      _id: bonusFromDB._id.toHexString ? bonusFromDB._id.toHexString() : String(bonusFromDB._id),
+      ...(bonusFromDB as Omit<Bonus, '_id' | 'createdAt' | 'updatedAt'>), // Cast to base type, then add processed fields
+      _id: typeof bonusFromDB._id === 'string' ? bonusFromDB._id : bonusFromDB._id.toHexString(),
       createdAt: new Date(bonusFromDB.createdAt),
       updatedAt: new Date(bonusFromDB.updatedAt),
-    }  as unknown as Bonus;
+    } as Bonus;
   } catch (e) {
     console.error('Failed to fetch bonus by ID:', e);
     return null;
   }
 }
-
