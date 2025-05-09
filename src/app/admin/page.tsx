@@ -1,9 +1,18 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import { Gift, Settings, Users } from 'lucide-react';
+import { Gift, Settings, Users, CheckCircle2 } from 'lucide-react';
+import { getBonuses } from './bonuses/_actions'; // Import the (now mocked) action
+import type { Bonus } from '@/schemas/bonus';
 
-export default function AdminDashboardPage() {
+export const dynamic = 'force-dynamic'; // Ensures fresh data on each request, good for when data changes
+
+export default async function AdminDashboardPage() {
+  const bonuses: Bonus[] = await getBonuses();
+  const activeBonusesCount = bonuses.filter(b => b.isActive).length;
+  // Placeholder for total users if that data becomes available
+  const totalUsersCount = "N/A"; 
+
   return (
     <div className="space-y-8">
       <header>
@@ -66,10 +75,10 @@ export default function AdminDashboardPage() {
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                     <CardTitle className="text-sm font-medium">Active Bonuses</CardTitle>
-                     <Gift className="h-4 w-4 text-muted-foreground" />
+                     <CheckCircle2 className="h-4 w-4 text-green-500" />
                 </CardHeader>
                 <CardContent>
-                    <div className="text-2xl font-bold">N/A</div>
+                    <div className="text-2xl font-bold">{activeBonusesCount}</div>
                     <p className="text-xs text-muted-foreground">Currently active promotions</p>
                 </CardContent>
             </Card>
@@ -79,12 +88,12 @@ export default function AdminDashboardPage() {
                      <Users className="h-4 w-4 text-muted-foreground" />
                 </CardHeader>
                 <CardContent>
-                    <div className="text-2xl font-bold">N/A</div>
+                    <div className="text-2xl font-bold">{totalUsersCount}</div>
                     <p className="text-xs text-muted-foreground">Registered users count</p>
                 </CardContent>
             </Card>
         </div>
-         <p className="text-sm text-muted-foreground mt-4">Note: Stats are placeholders and will require database integration.</p>
+         { totalUsersCount === "N/A" && <p className="text-sm text-muted-foreground mt-4">Note: User stats require database integration.</p>}
       </section>
     </div>
   );
