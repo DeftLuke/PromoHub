@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useActionState, useEffect } from 'react'; // Changed from useFormState in a previous step
+import { useActionState, useEffect } from 'react';
 import { useFormStatus } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
 import { login, LoginFormState } from './_actions';
@@ -25,9 +24,6 @@ function SubmitButton() {
 
 export default function LoginPage() {
   const searchParams = useSearchParams();
-  // redirectPath is determined on the client from URL search param.
-  // It's available if we want to pass it to the server action in the future,
-  // but currently, the server action redirects to a fixed /admin path.
   const redirectPath = searchParams.get('redirect') || '/admin';
 
   const initialState: LoginFormState = {};
@@ -37,7 +33,6 @@ export default function LoginPage() {
     if (state?.error) {
       toast({ title: 'লগইন ব্যর্থ হয়েছে', description: state.error, variant: 'destructive' }); // "Login Failed"
     }
-    // Successful login and redirect is handled by the server action.
   }, [state]);
 
   return (
@@ -56,20 +51,13 @@ export default function LoginPage() {
               <Label htmlFor="password">পাসওয়ার্ড</Label> {/* Password */}
               <Input id="password" name="password" type="password" required />
             </div>
-            {/* 
-              The hidden input for redirectPath is removed as the server action 
-              now redirects to a fixed '/admin' path.
-              If dynamic redirect is re-enabled in the server action, this can be added back:
-              <input type="hidden" name="redirectPath" value={redirectPath} /> 
-            */}
+            <input type="hidden" name="redirectPath" value={redirectPath} /> 
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
             <SubmitButton />
-            {/* Error messages are now shown via toast */}
           </CardFooter>
         </form>
       </Card>
     </div>
   );
 }
-
