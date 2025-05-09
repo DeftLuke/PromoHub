@@ -1,6 +1,9 @@
+'use client';
+
 import Link from 'next/link';
 import SiteLogo from './site-logo';
 import { Facebook, Twitter, Instagram, Youtube } from 'lucide-react';
+import { useState, useEffect } from 'react';
 
 const footerLinks = [
   { href: '#', label: 'শর্তাবলী' },
@@ -16,7 +19,11 @@ const socialLinks = [
 ];
 
 export default function SiteFooter() {
-  const currentYear = new Date().getFullYear();
+  const [currentYear, setCurrentYear] = useState<number | null>(null);
+
+  useEffect(() => {
+    setCurrentYear(new Date().getFullYear());
+  }, []);
 
   return (
     <footer className="bg-muted/50 text-muted-foreground py-8 md:py-12 border-t">
@@ -57,7 +64,7 @@ export default function SiteFooter() {
         
         <div className="mt-8 border-t border-border pt-8 text-center">
           <p className="text-sm">
-            &copy; {currentYear} সোহজ৮৮। সর্বস্বত্ব সংরক্ষিত।
+            © {currentYear !== null ? currentYear : new Date().getFullYear()} সোহজ৮৮। সর্বস্বত্ব সংরক্ষিত।
           </p>
           <p className="text-xs mt-1">
             অনুগ্রহ করে মনে রাখবেন যে জুয়া আসক্তি তৈরি করতে পারে। দায়িত্বের সাথে খেলুন। ১৮+
