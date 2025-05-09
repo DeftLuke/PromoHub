@@ -1,6 +1,8 @@
+
 import BonusForm from '../../_components/bonus-form';
 import { getBonusById, updateBonus } from '../../_actions';
-import type { BonusFormData, BonusActionState } from '@/schemas/bonus'; // Bonus type itself is not needed here directly for form
+import type { BonusFormData } from '@/schemas/bonus'; 
+import type { BonusActionState } from '../../_actions';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertTriangle } from "lucide-react"
@@ -27,9 +29,8 @@ export default async function EditBonusPage({ params }: EditBonusPageProps) {
     );
   }
 
-  // Prepare initial data for the form.
   const initialFormData: BonusFormData & { _id?: string } = {
-    _id: bonus._id, // Pass _id for context if needed, though not part of BonusFormData schema directly
+    _id: bonus._id, 
     title: bonus.title,
     description: bonus.description,
     turnoverRequirement: bonus.turnoverRequirement,
@@ -38,9 +39,8 @@ export default async function EditBonusPage({ params }: EditBonusPageProps) {
     isActive: bonus.isActive,
   };
   
-  // This function will be serialized and callable from the client component (BonusForm)
-  // It correctly captures params.id from the server component's scope.
-  async function handleUpdateBonus(data: BonusFormData): Promise<BonusActionState> {
+  async function handleUpdateBonusWrapper(data: BonusFormData): Promise<BonusActionState | undefined> {
+    'use server';
     return updateBonus(params.id, data);
   }
 
@@ -58,7 +58,7 @@ export default async function EditBonusPage({ params }: EditBonusPageProps) {
         <CardContent>
             <BonusForm
                 initialData={initialFormData}
-                onSubmitAction={handleUpdateBonus} // Pass the server-capable async function
+                onSubmitAction={handleUpdateBonusWrapper} 
                 submitButtonText="Update Bonus"
             />
         </CardContent>

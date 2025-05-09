@@ -19,7 +19,7 @@ import * as z from 'zod';
 
 interface BonusFormProps {
   initialData?: BonusFormData & { _id?: string };
-  onSubmitAction: (data: BonusFormData) => Promise<BonusActionState>;
+  onSubmitAction: (data: BonusFormData) => Promise<BonusActionState | undefined>; // Allow undefined for robustness
   submitButtonText?: string;
 }
 
@@ -61,10 +61,6 @@ export default function BonusForm({ initialData, onSubmitAction, submitButtonTex
         return;
       }
       
-      // Separate check for preview generation if needed, but primary concern is submission size.
-      // If MAX_FILE_SIZE_BYTES is small enough, MAX_PREVIEW_FILE_SIZE_BYTES might be redundant here if it was larger.
-      // For simplicity, we'll use MAX_FILE_SIZE_BYTES as the hard limit for attempting to read as Data URI.
-
       const reader = new FileReader();
       reader.onloadend = () => {
         const dataUri = reader.result as string;
@@ -78,14 +74,10 @@ export default function BonusForm({ initialData, onSubmitAction, submitButtonTex
       }
       reader.readAsDataURL(file);
     } else {
-      // If no file is selected, or selection is cleared
       const currentUrlValue = form.getValues('imageUrl');
-      // If the current value is not a Data URI (meaning it was likely a URL or initial data)
-      // and the file input is cleared, we might want to revert to initialData's imageUrl if it was a URL.
-      // Or simply clear the preview if the value is no longer a valid image source.
       if (!currentUrlValue?.startsWith('data:image/')) {
         setPreviewImageUrl(currentUrlValue && z.string().url().safeParse(currentUrlValue).success ? currentUrlValue : null);
-      } else if (!currentUrlValue) { // If imageUrl field is empty
+      } else if (!currentUrlValue) { 
         setPreviewImageUrl(null);
       }
     }
@@ -98,7 +90,7 @@ export default function BonusForm({ initialData, onSubmitAction, submitButtonTex
     if (url && z.string().url().safeParse(url).success) {
       setPreviewImageUrl(url);
     } else if (url && url.startsWith('data:image/')) {
-      setPreviewImageUrl(url); // Zod schema will validate its length on submit
+      setPreviewImageUrl(url); 
     } else {
       setPreviewImageUrl(null);
     }
@@ -109,7 +101,8 @@ export default function BonusForm({ initialData, onSubmitAction, submitButtonTex
     setIsSubmitting(true);
     try {
       const result = await onSubmitAction(values);
-      if (result.success) {
+      
+      if (result && result.success) {
         toast({
           title: 'Success!',
           description: result.message || 'Bonus saved successfully.',
@@ -118,7 +111,7 @@ export default function BonusForm({ initialData, onSubmitAction, submitButtonTex
         router.refresh(); 
       } else {
         // Handle Zod validation errors from server specifically
-        if (result.error === 'Invalid data.' && result.message) {
+        if (result && result.error === 'Invalid data.' && result.message) {
           try {
             const fieldErrors = JSON.parse(result.message) as Partial<Record<keyof BonusFormData, string[]>>;
             Object.entries(fieldErrors).forEach(([fieldName, errors]) => {
@@ -132,7 +125,6 @@ export default function BonusForm({ initialData, onSubmitAction, submitButtonTex
               variant: 'destructive',
             });
           } catch (parseError) {
-            // Fallback if JSON parsing of error message fails
             toast({
               title: 'Error Saving Bonus',
               description: result.message || 'Failed to save bonus. Please check the details.',
@@ -140,10 +132,10 @@ export default function BonusForm({ initialData, onSubmitAction, submitButtonTex
             });
           }
         } else {
-          // Handle other types of errors (e.g., 'Database error.')
+          // Handle other types of errors or if result is undefined
           toast({
             title: 'Error Saving Bonus',
-            description: result.message || 'Failed to save bonus. Please check the details.',
+            description: result?.message || 'Failed to save bonus. Please check the details or an unexpected error occurred.',
             variant: 'destructive',
           });
         }
@@ -225,12 +217,12 @@ export default function BonusForm({ initialData, onSubmitAction, submitButtonTex
                   placeholder="Paste image URL or Data URI, or use upload button" 
                   {...field}
                   onChange={(e) => {
-                    field.onChange(e); // RHF's own onChange
-                    handleImageUrlInputChange(e); // Custom handler for preview
+                    field.onChange(e); 
+                    handleImageUrlInputChange(e); 
                   }}
                   onBlur={(e) => {
-                    field.onBlur(); // RHF's own onBlur
-                    handleImageUrlInputChange(e); // Custom handler for preview
+                    field.onBlur(); 
+                    handleImageUrlInputChange(e); 
                   }}
                 />
               </FormControl>
@@ -241,11 +233,9 @@ export default function BonusForm({ initialData, onSubmitAction, submitButtonTex
                   type="file"
                   accept="image/*"
                   className="mt-2"
-                  // This input is for file selection only.
-                  // RHF's imageUrl is updated by handleImageChange via form.setValue
                   onChange={handleImageChange} 
                 />
-              <FormMessage /> {/* This will show Zod schema errors for imageUrl, including Data URI length */}
+              <FormMessage /> 
             </FormItem>
           )}
         />
@@ -260,8 +250,6 @@ export default function BonusForm({ initialData, onSubmitAction, submitButtonTex
                 fill
                 className="rounded-md border object-contain"
                 onError={() => {
-                  // Don't clear form.setValue('imageUrl') here if it was a valid URL that just failed to load for preview
-                  // Only clear previewImageUrl
                   setPreviewImageUrl(null); 
                   toast({ title: 'Preview Error', description: 'Could not load image preview from the source.', variant: 'warning'});
                 }}

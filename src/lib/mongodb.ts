@@ -60,13 +60,16 @@ const mockCursorOperations = (initialData: any[]): MockCursor => {
         sort: (sortOptions?: any) => {
             if (sortOptions && currentData.length > 0 && Object.keys(sortOptions).length > 0) {
                 const sortKey = Object.keys(sortOptions)[0];
-                if (sortKey in currentData[0]) { // Check if sortKey exists
+                // Check if sortKey exists in the first element as a proxy for all elements
+                if (currentData[0] && sortKey in currentData[0]) {
                     const sortDir = sortOptions[sortKey];
                     currentData.sort((a, b) => {
                         if (a[sortKey] < b[sortKey]) return sortDir === 1 ? -1 : 1;
                         if (a[sortKey] > b[sortKey]) return sortDir === 1 ? 1 : -1;
                         return 0;
                     });
+                } else {
+                    // console.warn(`MockDB: Sort key "${sortKey}" not found in data. Skipping sort.`);
                 }
             }
             return cursor;
@@ -136,7 +139,16 @@ function createMockCollection(collectionName: string): MockCollection {
         matchedCount = 1;
         const oldDoc = {...store[index]};
         if (update.$set) store[index] = { ...store[index], ...update.$set, updatedAt: new Date() };
-        if (JSON.stringify(oldDoc) !== JSON.stringify({ ...store[index], updatedAt: oldDoc.updatedAt})) modifiedCount = 1;
+        // Compare with a relevant part of oldDoc if updatedAt was the only change
+        const oldDocForComparison = {...oldDoc};
+        delete oldDocForComparison.updatedAt;
+        const newDocForComparison = {...store[index]};
+        delete newDocForComparison.updatedAt;
+
+        if (JSON.stringify(oldDocForComparison) !== JSON.stringify(newDocForComparison) || (Object.keys(update.$set).length > 0 && Object.keys(update.$set).some(k => update.$set[k] !== oldDoc[k]))) {
+             modifiedCount = 1;
+        }
+
       } else if (options?.upsert) {
         const newDocData = { ...(update.$set || {}), ...filter };
         if (!newDocData._id) newDocData._id = filter._id || `mockid-upsert-${Date.now()}`;
@@ -144,7 +156,7 @@ function createMockCollection(collectionName: string): MockCollection {
         newDocData.updatedAt = new Date();
         store.push(newDocData);
         upsertedId = newDocData._id;
-        modifiedCount = 1; // MongoDB considers an upsert as a modification if it results in an insert
+        modifiedCount = 1; 
       }
       return Promise.resolve({ acknowledged: true, matchedCount, modifiedCount, upsertedCount: upsertedId ? 1 : 0, upsertedId } as UpdateResult);
     },
@@ -189,7 +201,7 @@ const initializeMockDbAndGlobals = (): Promise<MockMongoClient> => {
     }),
     connect: async () => mockMongoClientInstance,
     close: async () => {},
-    admin: () => ({ // Add mock admin().ping()
+    admin: () => ({ 
       ping: async () => ({ ok: 1 }),
     }),
   };
@@ -205,22 +217,30 @@ const initializeMockDbAndGlobals = (): Promise<MockMongoClient> => {
 };
 
 // --- Logic to determine using mock or real ---
-const SHOULD_USE_MOCK_DB_INITIALLY = !MONGODB_URI_FROM_ENV || MONGODB_URI_FROM_ENV === "YOUR_MONGODB_URI_HERE" || MONGODB_URI_FROM_ENV.trim() === "";
+const shouldUseMock = 
+  !MONGODB_URI_FROM_ENV ||
+  MONGODB_URI_FROM_ENV === "YOUR_MONGODB_URI_HERE" ||
+  MONGODB_URI_FROM_ENV.trim() === "" ||
+  !DB_NAME_FROM_ENV || // Also use mock if DB_NAME is missing, even if URI is present
+  DB_NAME_FROM_ENV.trim() === "";
 
-if (SHOULD_USE_MOCK_DB_INITIALLY) {
+if (shouldUseMock) {
+  if (MONGODB_URI_FROM_ENV && MONGODB_URI_FROM_ENV !== "YOUR_MONGODB_URI_HERE" && MONGODB_URI_FROM_ENV.trim() !== "" && (!DB_NAME_FROM_ENV || DB_NAME_FROM_ENV.trim() === "")) {
+    console.warn('MONGODB_URI is set, but MONGODB_DB_NAME is missing or empty. Falling back to MOCK MongoDB.');
+  } else if (!MONGODB_URI_FROM_ENV || MONGODB_URI_FROM_ENV === "YOUR_MONGODB_URI_HERE" || MONGODB_URI_FROM_ENV.trim() === "") {
+    // This case is fine, expected mock usage
+  }
   clientPromiseInternal = initializeMockDbAndGlobals();
 } else {
+  // This 'else' block means MONGODB_URI_FROM_ENV and DB_NAME_FROM_ENV are both considered present and valid enough to attempt connection.
   try {
     const { MongoClient: ActualMongoClient, ServerApiVersion: ActualServerApiVersion, ObjectId: ActualObjectId } = require('mongodb');
 
-    if (!DB_NAME_FROM_ENV) {
-      throw new Error('MONGODB_URI is set, but MONGODB_DB_NAME is not. Both are required for real MongoDB connection. Please check your .env.local file.');
-    }
     if (!(MONGODB_URI_FROM_ENV.startsWith("mongodb://") || MONGODB_URI_FROM_ENV.startsWith("mongodb+srv://"))) {
-      throw new Error('Invalid MONGODB_URI scheme. Must start with "mongodb://" or "mongodb+srv://". Please check your .env.local file.');
+      throw new Error('Invalid MONGODB_URI scheme. Must start with "mongodb://" or "mongodb+srv://".');
     }
     if (MONGODB_URI_FROM_ENV === "mongodb://" || MONGODB_URI_FROM_ENV === "mongodb+srv://") {
-       throw new Error('Invalid MONGODB_URI. URI cannot be just the scheme (e.g., "mongodb://"). Please specify hosts (e.g., "mongodb://localhost:27017"). Check your .env.local file.');
+       throw new Error('Invalid MONGODB_URI. URI cannot be just the scheme (e.g., "mongodb://"). Please specify hosts.');
     }
 
     const client = new ActualMongoClient(MONGODB_URI_FROM_ENV, {
@@ -228,16 +248,16 @@ if (SHOULD_USE_MOCK_DB_INITIALLY) {
         version: ActualServerApiVersion.v1,
         strict: true,
         deprecationErrors: true,
-      } as any, // Cast to any to satisfy ServerApi type if needed, or ensure version matches installed mongodb
-      serverSelectionTimeoutMS: 5000, // Fail fast if server is not reachable
+      } as any, 
+      serverSelectionTimeoutMS: 5000, 
       connectTimeoutMS: 5000,
     });
     
     clientPromiseInternal = client.connect()
       .then(async connectedClient => {
         try {
-          await connectedClient.db(DB_NAME_FROM_ENV).admin().ping(); // Ping after connect
-          console.log("Successfully connected to Real MongoDB and ping was successful.");
+          await connectedClient.db(DB_NAME_FROM_ENV).admin().ping(); 
+          console.log(`Successfully connected to Real MongoDB (DB: ${DB_NAME_FROM_ENV}) and ping was successful.`);
           ObjectIdExport = ActualObjectId as any; 
           toObjectIdExport = (id: string): RealObjectIdType => new ActualObjectId(id); 
           return connectedClient as RealMongoClient;
@@ -245,20 +265,20 @@ if (SHOULD_USE_MOCK_DB_INITIALLY) {
           const uriToLog = MONGODB_URI_FROM_ENV.substring(0, MONGODB_URI_FROM_ENV.indexOf('@') > 0 ? MONGODB_URI_FROM_ENV.indexOf('@') : MONGODB_URI_FROM_ENV.length);
           console.warn(`Real MongoDB connected but ping failed (URI: ${uriToLog}, DB: ${DB_NAME_FROM_ENV}, Ping Error: ${pingErr.message}). Falling back to MOCK MongoDB implementation.`);
           await connectedClient.close().catch(closeErr => console.error("Error closing client during ping fallback:", closeErr));
-          return initializeMockDbAndGlobals(); // Return promise resolving to MockMongoClient
+          return initializeMockDbAndGlobals(); 
         }
       })
       .catch(connectErr => {
         const uriToLog = MONGODB_URI_FROM_ENV.substring(0, MONGODB_URI_FROM_ENV.indexOf('@') > 0 ? MONGODB_URI_FROM_ENV.indexOf('@') : MONGODB_URI_FROM_ENV.length);
-        console.warn(`Real MongoDB connection attempt failed (URI: ${uriToLog}, Error: ${connectErr.message}). Falling back to MOCK MongoDB implementation.`);
+        console.warn(`Real MongoDB connection attempt failed (URI: ${uriToLog}, DB: ${DB_NAME_FROM_ENV}, Error: ${connectErr.message}). Falling back to MOCK MongoDB implementation.`);
         if (client && typeof client.close === 'function') {
             client.close().catch(closeErr => console.error("Error closing client during connect fallback:", closeErr));
         }
-        return initializeMockDbAndGlobals(); // Return promise resolving to MockMongoClient
+        return initializeMockDbAndGlobals(); 
       });
 
-  } catch (e: any) {
-    console.error(`Critical error during Real MongoDB setup: ${e.message}. Falling back to MOCK MongoDB implementation.`);
+  } catch (e: any) { 
+    console.error(`Critical error during Real MongoDB setup (e.g. 'mongodb' module not found, or URI/DB_NAME issues): ${e.message}. Falling back to MOCK MongoDB implementation.`);
     clientPromiseInternal = initializeMockDbAndGlobals();
   }
 }
@@ -266,10 +286,8 @@ if (SHOULD_USE_MOCK_DB_INITIALLY) {
 export default clientPromiseInternal;
 export { ObjectIdExport as ObjectId, toObjectIdExport as toObjectId };
 
-// Ensuring DB_NAME is exported for use in other modules, defaulting if mock is used or not set.
-export const DB_NAME = DB_NAME_FROM_ENV || 'mock_sohoz88_db';
+export const DB_NAME = shouldUseMock || !DB_NAME_FROM_ENV ? 'mock_sohoz88_db' : DB_NAME_FROM_ENV;
 
 
 export type Collection<T extends Document = Document> = RealCollectionType<T>;
 export type { FindCursor as AppFindCursor, AggregationCursor as AppAggregationCursor };
-
