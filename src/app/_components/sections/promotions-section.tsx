@@ -26,7 +26,7 @@ export default async function PromotionsSection() {
             আকর্ষণীয় <span className="text-primary">প্রোমোশন</span> ও <span className="text-primary">অফারসমূহ</span>
           </h2>
           <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
-            সোহজ৮৮ এ আপনার গেমিং অভিজ্ঞতা আরও রোমাঞ্চকর করতে আমরা নিয়ে এসেছি দারুণ সব প্রোমোশন। এখনই দেখে নিন!
+            Bajibuz এ আপনার গেমিং অভিজ্ঞতা আরও রোমাঞ্চকর করতে আমরা নিয়ে এসেছি দারুণ সব প্রোমোশন। এখনই দেখে নিন!
           </p>
         </div>
 

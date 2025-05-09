@@ -52,10 +52,10 @@ export default function HowToJoinSection() {
       <div className="container mx-auto px-4 md:px-6">
         <div className="text-center mb-12 md:mb-16">
           <h2 className="text-3xl md:text-4xl font-bold text-foreground tracking-tight">
-            কিভাবে <span className="text-primary">সোহজ৮৮</span> এ জয়েন করবেন?
+            কিভাবে <span className="text-primary">Bajibuz</span> এ জয়েন করবেন?
           </h2>
           <p className="mt-4 text-lg text-muted-foreground max-w-2xl mx-auto">
-            মাত্র কয়েকটি সহজ ধাপ অনুসরণ করে সোহজ৮৮ পরিবারে যোগ দিন এবং সীমাহীন বিনোদন উপভোগ করুন।
+            মাত্র কয়েকটি সহজ ধাপ অনুসরণ করে Bajibuz পরিবারে যোগ দিন এবং সীমাহীন বিনোদন উপভোগ করুন।
           </p>
         </div>
 

@@ -32,7 +32,7 @@ export default function SiteFooter() {
           <div>
             <SiteLogo />
             <p className="mt-2 text-sm">
-              সোহজ৮৮ - আপনার বিশ্বস্ত অনলাইন গেমিং এবং বেটিং পার্টনার। সেরা অভিজ্ঞতা পেতে আজই যোগ দিন!
+              Bajibuz - আপনার বিশ্বস্ত অনলাইন গেমিং এবং বেটিং পার্টনার। সেরা অভিজ্ঞতা পেতে আজই যোগ দিন!
             </p>
           </div>
           
@@ -58,16 +58,16 @@ export default function SiteFooter() {
                 </Link>
               ))}
             </div>
-            <p className="mt-4 text-sm">সাহায্যের জন্য যোগাযোগ করুন: support@sohoz88.com</p>
+            <p className="mt-4 text-sm">সাহায্যের জন্য যোগাযোগ করুন: support@bajibuz.com</p>
           </div>
         </div>
         
         <div className="mt-8 border-t border-border pt-8 text-center">
           <p className="text-sm">
-            © {currentYear !== null ? currentYear : new Date().getFullYear()} সোহজ৮৮। সর্বস্বত্ব সংরক্ষিত।
+            © {currentYear !== null ? currentYear : new Date().getFullYear()} Bajibuz । সর্বস্বত্ব সংরক্ষিত।
           </p>
           <p className="text-xs mt-1">
-            অনুগ্রহ করে মনে রাখবেন যে জুয়া আসক্তি তৈরি করতে পারে। দায়িত্বের সাথে খেলুন। ১৮+
+            অনুগ্রহ করে মনে রাখবেন যে জুয়া আসক্তি তৈরি করতে পারে। দায়িত্বের সাথে খেলুন। ১৮+ বছরের নিচে খেলতে পারবেন না।
           </p>
         </div>
       </div>

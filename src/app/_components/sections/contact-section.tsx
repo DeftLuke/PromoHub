@@ -25,7 +25,7 @@ export default function ContactSection() {
                 <div>
                   <h4 className="font-semibold text-foreground">ইমেইল</h4>
                   <a href="mailto:support@sohoz88.com" className="text-muted-foreground hover:text-primary transition-colors">
-                    support@sohoz88.com
+                    support@Bajibuz.com
                   </a>
                   <p className="text-xs text-muted-foreground/80">সাধারণ জিজ্ঞাসা এবং সহায়তার জন্য।</p>
                 </div>

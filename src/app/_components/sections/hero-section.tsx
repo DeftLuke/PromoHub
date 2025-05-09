@@ -3,7 +3,7 @@
 import { Button } from '@/components/ui/button';
 import { ArrowRight, PlayCircle } from 'lucide-react';
 import Image from 'next/image';
-import React from 'react'; // Import React for type React.MouseEvent
+import React from 'react';
 
 export default function HeroSection() {
   const handleScrollToJoin = (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -24,7 +24,7 @@ export default function HeroSection() {
         <div className="grid md:grid-cols-2 gap-8 items-center">
           <div className="text-center md:text-left animate-fade-in-up">
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight text-foreground">
-              সোহজ৮৮ এ স্বাগতম!
+              Bajibuz এ স্বাগতম!
             </h1>
             <p className="mt-6 text-lg md:text-xl text-muted-foreground max-w-xl mx-auto md:mx-0">
               বাংলাদেশের সেরা অনলাইন গেমিং প্ল্যাটফর্মে যোগ দিন এবং উপভোগ করুন হাজারো রকমের গেম আর আকর্ষণীয় সব বোনাস। আপনার ভাগ্য পরীক্ষা করার এটাই সেরা সময়!
