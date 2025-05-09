@@ -1,119 +1,131 @@
 // src/lib/mongodb.ts
+import type { MongoClient as RealMongoClient, Collection as RealCollection, ObjectId as RealObjectIdType, ServerApiVersion as RealServerApiVersion } from 'mongodb';
 
-// MOCK IMPLEMENTATION for MongoDB
-// This mock is used because a real MongoDB URI was not provided or connection failed.
-// It allows the admin panel's bonus and settings features to run with in-memory-like behavior.
+// Conditional type for ObjectId
+type ObjectIdType = RealObjectIdType | string;
 
-console.warn(
-  'MongoDB connection is MOCKED. Using in-memory-like data for /admin/bonuses and /admin/settings. Data will not persist across server restarts.'
-);
+let client: RealMongoClient;
+let clientPromiseInternal: Promise<RealMongoClient | any>; // Use 'any' for mock client
+let ObjectIdExport: { new (id?: string | number | RealObjectIdType | Buffer): ObjectIdType; (id?: string | number | RealObjectIdType | Buffer): ObjectIdType; };
+let toObjectIdExport: (id: string) => ObjectIdType;
 
-const mockCollectionOperations = {
-  find: (query?: any) => {
-    // find() returns a cursor-like object synchronously
-    const cursor = {
-      sort: (sortOptions?: any) => {
-        // sort() also returns a cursor-like object synchronously
-        // console.log('MOCK DB: find().sort() called. Query:', query, 'Sort:', sortOptions);
-        return {
-          toArray: async () => {
-            // console.log('MOCK DB: find().sort().toArray() called. Query:', query, 'Sort:', sortOptions);
-            // Simulate returning an empty array for bonuses as a default.
-            // For a more functional mock, this could interact with an in-memory array.
-            return [];
-          },
-          // Other cursor methods like limit, skip can be chained here if needed
-          limit: (num: number) => { return { toArray: async () => [] }; /* Simplified */ },
-          skip: (num: number) => { return { toArray: async () => [] }; /* Simplified */ },
-        };
-      },
-      toArray: async () => {
-        // console.log('MOCK DB: find().toArray() (without sort) called. Query:', query);
-        return []; // Simulate empty array
-      },
-      limit: (num: number) => {
-        // console.log('MOCK DB: find().limit() called. Query:', query, 'Limit:', num);
-        return { // returns a new cursor-like object
-            sort: (sortOptions?: any) => ({ toArray: async () => [] }),
-            toArray: async () => []
-        };
-      },
-      skip: (num: number) => {
-        // console.log('MOCK DB: find().skip() called. Query:', query, 'Skip:', num);
-         return { // returns a new cursor-like object
-            sort: (sortOptions?: any) => ({ toArray: async () => [] }),
-            toArray: async () => []
-        };
+
+const MONGODB_URI = process.env.MONGODB_URI;
+const DB_NAME = process.env.MONGODB_DB_NAME;
+
+if (!MONGODB_URI) {
+  console.warn(
+    'MONGODB_URI is not set. Using MOCK MongoDB implementation. Data will not persist across server restarts.'
+  );
+
+  const mockCollectionOperations = {
+    find: function(query?: any) {
+      // console.log('MOCK DB: find() called with query:', query);
+      const cursorObject = {
+        _query: query,
+        _sortOptions: null as any,
+        _limit: null as number | null,
+        _skip: null as number | null,
+        _dataStore: [] as any[], // Simplified in-memory store for this mock
+
+        sort: function(sortOptions?: any) {
+          // console.log('MOCK DB: sort() called with options:', sortOptions, 'on query:', this._query);
+          this._sortOptions = sortOptions;
+          // Simulate sorting if a basic in-memory store were more complex
+          return this; 
+        },
+        limit: function(limitValue?: number) {
+          // console.log('MOCK DB: limit() called with value:', limitValue);
+          this._limit = limitValue as number;
+          return this;
+        },
+        skip: function(skipValue?: number) {
+          // console.log('MOCK DB: skip() called with value:', skipValue);
+          this._skip = skipValue as number;
+          return this;
+        },
+        toArray: async function(): Promise<any[]> {
+          // console.log(`MOCK DB: toArray() called. Query: ${JSON.stringify(this._query)}, Sort: ${JSON.stringify(this._sortOptions)}, Limit: ${this._limit}, Skip: ${this._skip}`);
+          
+          // Simulate very basic data fetching for known mock items
+          if (this._query && query._id === 'global_settings') { // typically findOne is used for this
+            // return [{ _id: 'global_settings', backgroundType: 'color', backgroundValue: '#E0F2FE', updatedAt: new Date() }];
+          }
+          // For bonuses, just return empty array as per previous mock behavior to avoid breaking tests/pages expecting empty.
+          // A more complex mock would filter/sort an in-memory array here.
+          return Promise.resolve([]); 
+        }
+      };
+      return cursorObject;
+    },
+    findOne: async (query?: any) => {
+      // console.log('MOCK DB: findOne() called. Query:', query);
+      if (query && query._id === 'global_settings') {
+        return { _id: 'global_settings', backgroundType: 'color', backgroundValue: '#E0F2FE', updatedAt: new Date() };
       }
-    };
-    return cursor;
-  },
-  findOne: async (query?: any) => {
-    // console.log('MOCK DB: findOne() called. Query:', query);
-    if (query && query._id === 'global_settings') {
-      // Default settings for the site background
-      return { _id: 'global_settings', backgroundType: 'color', backgroundValue: '#E0F2FE', updatedAt: new Date() };
-    }
-    // Default for bonus by ID
-    return null;
-  },
-  insertOne: async (doc: any) => {
-    const newId = doc._id || `mockid-${Date.now()}-${Math.random().toString(36).substring(7)}`;
-    // console.log('MOCK DB: insertOne() called. Doc:', doc, 'Generated ID:', newId);
-    return { acknowledged: true, insertedId: newId };
-  },
-  updateOne: async (filter: any, update: any, options?: any) => {
-    // console.log('MOCK DB: updateOne() called. Filter:', filter, 'Update:', update, 'Options:', options);
-    if (options && options.upsert && filter._id === 'global_settings') {
-      return { acknowledged: true, matchedCount: 0, modifiedCount: 1, upsertedId: filter._id };
-    }
-    // Assume a match for other updates
-    return { acknowledged: true, matchedCount: 1, modifiedCount: 1, upsertedId: null };
-  },
-  deleteOne: async (filter: any) => {
-    // console.log('MOCK DB: deleteOne() called. Filter:', filter);
-    return { acknowledged: true, deletedCount: 1 }; // Assume deletion is successful
-  },
-};
+      // Simulate finding a bonus by mock ID (string)
+      if (query && typeof query._id === 'string' && query._id.startsWith('mockid-')) {
+        // Return a sample bonus structure. In a real mock, you'd search an in-memory array.
+        // return { _id: query._id, title: "Mock Bonus", description: "Mock Desc", turnoverRequirement: "1x", imageUrl: "https://picsum.photos/200", ctaLink: "#", isActive: true, createdAt: new Date(), updatedAt: new Date() };
+      }
+      return null;
+    },
+    insertOne: async (doc: any) => {
+      const newId = doc._id || `mockid-${Date.now()}-${Math.random().toString(36).substring(2,7)}`;
+      // console.log('MOCK DB: insertOne() called. Doc:', doc, 'Generated ID:', newId);
+      // In a real mock, you'd add 'doc' to an in-memory array.
+      return { acknowledged: true, insertedId: String(newId) };
+    },
+    updateOne: async (filter: any, update: any, options?: any) => {
+      // console.log('MOCK DB: updateOne() called. Filter:', filter, 'Update:', update, 'Options:', options);
+      // In a real mock, you'd find and update an item in an in-memory array.
+      if (options && options.upsert && filter._id === 'global_settings') {
+        return { acknowledged: true, matchedCount: 0, modifiedCount: 1, upsertedCount: 1, upsertedId: filter._id as string };
+      }
+      return { acknowledged: true, matchedCount: 1, modifiedCount: 1, upsertedCount: 0, upsertedId: null };
+    },
+    deleteOne: async (filter: any) => {
+      // console.log('MOCK DB: deleteOne() called. Filter:', filter);
+      // In a real mock, you'd remove an item from an in-memory array.
+      return { acknowledged: true, deletedCount: 1 };
+    },
+  };
 
-const clientPromise: Promise<any> = Promise.resolve({
-  // This outer object is what `await clientPromise` resolves to.
-  connect: async () => {
-    // console.log('MOCK DB: connect() called');
-    // The connect method resolves to an object that has a `db` method.
-    return {
-      db: (dbName?: string) => {
-        // console.log(`MOCK DB: db('${dbName}') called after connect`);
-        return {
-          collection: (colName?: string) => {
-            // console.log(`MOCK DB: collection('${colName}') called after connect.db`);
-            return mockCollectionOperations;
-          },
-        };
-      },
-      close: async () => {
-        // console.log('MOCK DB: close() called after connect');
-      },
-    };
-  },
-  // This `db` method is available directly on the resolved `clientPromise` value.
-  // This is the path typically taken by `getBonusesCollection` etc.
-  db: (dbName?: string) => {
-    // console.log(`MOCK DB: db('${dbName}') called directly`);
-    return {
-      collection: (colName?: string) => {
-        // console.log(`MOCK DB: collection('${colName}') called directly on db`);
-        return mockCollectionOperations;
-      },
-    };
-  },
-});
+  clientPromiseInternal = Promise.resolve({
+    db: (dbName?: string) => ({
+      collection: (colName?: string) => mockCollectionOperations as any, // Cast to 'any' to satisfy Collection type for mock
+    }),
+    connect: async () => clientPromiseInternal, // Mock connect returns itself
+    close: async () => {}, // Mock close
+  } as any); // Cast to 'any' to satisfy MongoClient type for mock
 
-export default clientPromise;
+  ObjectIdExport = function ObjectId(id?: string | number | Buffer | RealObjectIdType) {
+    if (id instanceof Buffer) return `mockid-buffer-${id.toString('hex')}`;
+    return String(id || `mockid-obj-${Date.now()}-${Math.random().toString(36).substring(2,7)}`);
+  } as any;
+  toObjectIdExport = (id: string): string => id; // In mock, IDs are just strings
 
-// Helper to convert string ID to ObjectId (or mock equivalent)
-export const toObjectId = (id: string): string => {
-  // In a real MongoDB setup, this would involve `new ObjectId(id)` and validation.
-  // For the mock, IDs are just strings, so we return the ID as is.
-  return id;
-};
+} else {
+  // REAL MongoDB implementation
+  if (!DB_NAME) {
+    throw new Error('MONGODB_URI is set, but MONGODB_DB_NAME is not. Both are required for real MongoDB connection.');
+  }
+  // These imports are only used if MONGODB_URI is set.
+  const { MongoClient: ActualMongoClient, ServerApiVersion: ActualServerApiVersion, ObjectId: ActualObjectId } = require('mongodb');
+
+  client = new ActualMongoClient(MONGODB_URI, {
+    serverApi: {
+      version: ActualServerApiVersion.v1,
+      strict: true,
+      deprecationErrors: true,
+    } as any, // Cast to any if ServerApiVersion type from require differs slightly
+  });
+  clientPromiseInternal = client.connect();
+  ObjectIdExport = ActualObjectId;
+  toObjectIdExport = (id: string): RealObjectIdType => new ActualObjectId(id);
+}
+
+export default clientPromiseInternal;
+// Export ObjectId and toObjectId based on the mode (mock or real)
+export { ObjectIdExport as ObjectId, toObjectIdExport as toObjectId };
+export type { Collection }; // Export real Collection type for usage in actions
