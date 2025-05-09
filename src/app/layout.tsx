@@ -72,6 +72,7 @@ export default async function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${noto_sans_bengali.variable} font-sans antialiased flex flex-col min-h-screen relative`}
         style={backgroundStyle} // Apply dynamic background style
+        suppressHydrationWarning={true} // Add suppressHydrationWarning here as well
       >
         {videoBackgroundElement} {/* Render video background if applicable */}
         <div className="relative z-0 flex flex-col min-h-screen"> {/* Content wrapper for z-indexing */}
@@ -84,3 +85,4 @@ export default async function RootLayout({
     </html>
   );
 }
+
