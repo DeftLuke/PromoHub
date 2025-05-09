@@ -1,6 +1,6 @@
 import BonusForm from '../../_components/bonus-form';
 import { getBonusById, updateBonus } from '../../_actions';
-import type { Bonus, BonusFormData, BonusActionState } from '@/schemas/bonus';
+import type { BonusFormData, BonusActionState } from '@/schemas/bonus'; // Bonus type itself is not needed here directly for form
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertTriangle } from "lucide-react"
@@ -27,8 +27,9 @@ export default async function EditBonusPage({ params }: EditBonusPageProps) {
     );
   }
 
-  // Prepare initial data for the form. _id is not part of BonusFormData.
-  const initialFormData: BonusFormData = {
+  // Prepare initial data for the form.
+  const initialFormData: BonusFormData & { _id?: string } = {
+    _id: bonus._id, // Pass _id for context if needed, though not part of BonusFormData schema directly
     title: bonus.title,
     description: bonus.description,
     turnoverRequirement: bonus.turnoverRequirement,
@@ -37,10 +38,11 @@ export default async function EditBonusPage({ params }: EditBonusPageProps) {
     isActive: bonus.isActive,
   };
   
-  // The updateBonus action needs the id, which we get from params.
-  // We bind the id to the updateBonus server action.
-  // The BonusForm will call this bound action with just the form data.
-  const boundUpdateBonusAction = updateBonus.bind(null, params.id);
+  // This function will be serialized and callable from the client component (BonusForm)
+  // It correctly captures params.id from the server component's scope.
+  async function handleUpdateBonus(data: BonusFormData): Promise<BonusActionState> {
+    return updateBonus(params.id, data);
+  }
 
   return (
     <div className="space-y-8">
@@ -56,7 +58,7 @@ export default async function EditBonusPage({ params }: EditBonusPageProps) {
         <CardContent>
             <BonusForm
                 initialData={initialFormData}
-                onSubmitAction={boundUpdateBonusAction}
+                onSubmitAction={handleUpdateBonus} // Pass the server-capable async function
                 submitButtonText="Update Bonus"
             />
         </CardContent>

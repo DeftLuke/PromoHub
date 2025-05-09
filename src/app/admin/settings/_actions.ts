@@ -2,26 +2,23 @@
 
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
-import { siteSettingsSchema, SiteSettingsFormData } from '@/schemas/settings';
-// Removed MongoDB specific imports:
-// import clientPromise from '@/lib/mongodb';
-// import type { Collection } from 'mongodb';
+import { siteSettingsSchema, SiteSettingsFormData, SiteSettings } from '@/schemas/settings';
+import clientPromise from '@/lib/mongodb';
+import type { Collection, ObjectId }from 'mongodb';
 
-// const DB_NAME = process.env.MONGODB_DB_NAME || 'sohoz88';
-// const SETTINGS_COLLECTION = 'siteSettings';
-// const SITE_SETTINGS_DOC_ID = 'global_settings'; 
+const DB_NAME = process.env.MONGODB_DB_NAME;
+const SETTINGS_COLLECTION = process.env.SETTINGS_COLLECTION_NAME || 'siteSettings';
+const SITE_SETTINGS_DOC_ID = 'global_settings'; // Use a fixed string ID for the single settings document
 
-// In-memory store for site settings
-let mockSettingsStore: SiteSettingsFormData = {
-  backgroundType: 'color',
-  backgroundValue: '#E0F2FE', // Default light blue background
-};
-
-// async function getSettingsCollection(): Promise<Collection<Omit<SiteSettingsFormData, '_id'> & { _id?: string, updatedAt?: Date }>> {
-//   const client = await clientPromise;
-//   const db = client.db(DB_NAME);
-//   return db.collection(SETTINGS_COLLECTION);
-// }
+async function getSettingsCollection(): Promise<Collection<Omit<SiteSettings, '_id' | 'updatedAt'> & { _id: string; updatedAt: Date }>> {
+  if (!DB_NAME) {
+    throw new Error('MongoDB DB_NAME is not configured in environment variables.');
+  }
+  const client = await clientPromise;
+  const db = client.db(DB_NAME);
+  // The collection stores documents with _id as string (SITE_SETTINGS_DOC_ID)
+  return db.collection(SETTINGS_COLLECTION);
+}
 
 export type SettingsActionState = {
   error?: string;
@@ -31,11 +28,22 @@ export type SettingsActionState = {
 
 export async function getSiteSettings(): Promise<SiteSettingsFormData | null> {
   try {
-    // Return a deep copy of the mock settings
-    return JSON.parse(JSON.stringify(mockSettingsStore));
+    const collection = await getSettingsCollection();
+    const settingsDoc = await collection.findOne({ _id: SITE_SETTINGS_DOC_ID });
+
+    if (settingsDoc) {
+      // Destructure to ensure only fields from SiteSettingsFormData are returned
+      const { backgroundType, backgroundValue } = settingsDoc;
+      return { backgroundType, backgroundValue };
+    }
+    // Return default settings if nothing is found in the DB
+    return { 
+        backgroundType: 'color',
+        backgroundValue: '#E0F2FE', // Default light blue background
+      };
   } catch (e) {
-    console.error('Failed to fetch site settings (mock):', e);
-    // Fallback default if store is somehow corrupted (should not happen with simple object)
+    console.error('Failed to fetch site settings:', e);
+    // Fallback default in case of error
     return { 
         backgroundType: 'color',
         backgroundValue: '#E0F2FE',
@@ -46,19 +54,33 @@ export async function getSiteSettings(): Promise<SiteSettingsFormData | null> {
 export async function updateSiteSettings(data: SiteSettingsFormData): Promise<SettingsActionState> {
   const validatedFields = siteSettingsSchema.safeParse(data);
   if (!validatedFields.success) {
-    return { error: 'Invalid data.', message: validatedFields.error.flatten().fieldErrors._messages.join(', ') };
+    return { error: 'Invalid data.', message: JSON.stringify(validatedFields.error.flatten().fieldErrors) };
   }
 
   try {
-    mockSettingsStore = { ...validatedFields.data };
-    // In a real DB, you'd also set `updatedAt: new Date()` here.
-    // For mock, it's not stored unless added to SiteSettingsFormData.
+    const collection = await getSettingsCollection();
+    const settingsToUpdate = {
+      ...validatedFields.data,
+      updatedAt: new Date(),
+    };
+
+    await collection.updateOne(
+      { _id: SITE_SETTINGS_DOC_ID },
+      { $set: settingsToUpdate },
+      { upsert: true } // Create the document if it doesn't exist
+    );
 
     revalidatePath('/admin/settings');
     revalidatePath('/'); // Revalidate all pages that might use site settings
-    return { success: true, message: 'Site settings updated successfully (mock).' };
+    return { success: true, message: 'Site settings updated successfully.' };
   } catch (e) {
-    console.error('Failed to update site settings (mock):', e);
-    return { error: 'Mock error.', message: 'Failed to update site settings (mock).' };
+    console.error('Failed to update site settings:', e);
+    let errorMessage = 'Failed to update site settings due to a server issue.';
+    if (e instanceof Error) {
+      errorMessage = e.message;
+    } else if (typeof e === 'string') {
+      errorMessage = e;
+    }
+    return { error: 'Database error.', message: errorMessage };
   }
 }

@@ -3,149 +3,206 @@
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { bonusSchema, BonusFormData, Bonus } from '@/schemas/bonus';
-// Removed MongoDB specific imports:
-// import clientPromise, { toObjectId } from '@/lib/mongodb';
-// import type { Collection, ObjectId } from 'mongodb';
+import clientPromise, { toObjectId } from '@/lib/mongodb';
+import type { Collection, ObjectId } from 'mongodb';
 
-// const DB_NAME = process.env.MONGODB_DB_NAME || 'sohoz88';
-// const BONUSES_COLLECTION = 'bonuses';
+const DB_NAME = process.env.MONGODB_DB_NAME;
+const BONUSES_COLLECTION = process.env.BONUSES_COLLECTION_NAME || 'bonuses';
 
-// In-memory store for bonuses
-let mockBonusesStore: Bonus[] = [
-  {
-    _id: '1',
-    title: 'স্বাগতম বোনাস - প্রথম ডিপোজিটে ১০০% পর্যন্ত!',
-    description: 'নতুন খেলোয়াড়দের জন্য দারুণ সুযোগ! আপনার প্রথম ডিপোজিটে পান ১০০% বোনাস, সর্বোচ্চ ১০,০০০ টাকা পর্যন্ত। আজই রেজিস্টার করুন!',
-    turnoverRequirement: '20x',
-    imageUrl: 'https://picsum.photos/seed/promo1/400/250',
-    ctaLink: '/register',
-    isActive: true,
-    createdAt: new Date('2023-01-01T10:00:00Z'),
-    updatedAt: new Date('2023-01-01T10:00:00Z'),
-  },
-  {
-    _id: '2',
-    title: 'সাপ্তাহিক ক্যাশব্যাক অফার',
-    description: 'প্রতি সপ্তাহে আপনার লসের উপর পান ১০% পর্যন্ত ক্যাশব্যাক। খেলা চালিয়ে যান, সোহজ৮৮ আছে আপনার পাশে!',
-    turnoverRequirement: '5x',
-    imageUrl: 'https://picsum.photos/seed/promo2/400/250',
-    ctaLink: '/promotions/cashback',
-    isActive: true,
-    createdAt: new Date('2023-01-05T12:00:00Z'),
-    updatedAt: new Date('2023-01-05T12:00:00Z'),
-  },
-    {
-    _id: '3',
-    title: 'বিশেষ টুর্নামেন্ট বোনাস',
-    description: 'আমাদের বিশেষ স্লট এবং টেবিল গেম টুর্নামেন্টে অংশগ্রহণ করে জিতে নিন আকর্ষণীয় পুরস্কার ও বোনাস।',
-    turnoverRequirement: 'None',
-    imageUrl: 'https://picsum.photos/seed/promo3/400/250',
-    ctaLink: '/tournaments',
-    isActive: false,
-    createdAt: new Date('2023-01-10T15:00:00Z'),
-    updatedAt: new Date('2023-01-10T15:00:00Z'),
-  },
-];
-let nextId = mockBonusesStore.length + 1;
-
-const generateId = () => (nextId++).toString();
-
-// async function getBonusesCollection(): Promise<Collection<Omit<BonusFormData, '_id'> & { createdAt?: Date, updatedAt?: Date }>> {
-//   const client = await clientPromise;
-//   const db = client.db(DB_NAME);
-//   return db.collection(BONUSES_COLLECTION);
-// }
+async function getBonusesCollection(): Promise<Collection<Omit<Bonus, '_id' | 'createdAt' | 'updatedAt'> & { _id: ObjectId; createdAt: Date; updatedAt: Date }>> {
+  if (!DB_NAME) {
+    throw new Error('MongoDB DB_NAME is not configured in environment variables.');
+  }
+  const client = await clientPromise;
+  const db = client.db(DB_NAME);
+  return db.collection(BONUSES_COLLECTION);
+}
 
 export type BonusActionState = {
   error?: string;
   success?: boolean;
   message?: string;
-  bonusId?: string;
+  bonusId?: string; // Changed from ObjectId to string for client consumption
 };
 
 export async function createBonus(data: BonusFormData): Promise<BonusActionState> {
   const validatedFields = bonusSchema.safeParse(data);
   if (!validatedFields.success) {
-    return { error: 'Invalid data.', message: validatedFields.error.flatten().fieldErrors._messages.join(', ') };
+    return { error: 'Invalid data.', message: JSON.stringify(validatedFields.error.flatten().fieldErrors) };
   }
 
   try {
-    const newBonus: Bonus = {
+    const collection = await getBonusesCollection();
+    const newBonusDocument = {
       ...validatedFields.data,
-      _id: generateId(),
+      _id: new ObjectId(), // Generate ObjectId here
       createdAt: new Date(),
       updatedAt: new Date(),
     };
-    mockBonusesStore.push(newBonus);
+    
+    const result = await collection.insertOne(newBonusDocument as any); // Cast because our collection type expects _id to be ObjectId, but newBonusDocument's _id is type ObjectId already
+
     revalidatePath('/admin/bonuses');
     revalidatePath('/'); 
-    return { success: true, message: 'Bonus created successfully (mock).', bonusId: newBonus._id };
+    revalidatePath('/promotions');
+
+    return { success: true, message: 'Bonus created successfully.', bonusId: result.insertedId.toHexString() };
   } catch (e) {
-    console.error('Failed to create bonus (mock):', e);
-    return { error: 'Mock error.', message: 'Failed to create bonus (mock).' };
+    console.error('Failed to create bonus:', e);
+    let errorMessage = 'Failed to create bonus due to a server issue.';
+    if (e instanceof Error) {
+      errorMessage = e.message;
+    } else if (typeof e === 'string') {
+      errorMessage = e;
+    }
+    return { error: 'Database error.', message: errorMessage };
   }
 }
 
 export async function updateBonus(id: string, data: BonusFormData): Promise<BonusActionState> {
+  let loggedImageUrl = 'Invalid imageUrl type';
+  if (typeof data.imageUrl === 'string') {
+    loggedImageUrl = data.imageUrl.startsWith('data:image/') ? `Data URI (length: ${data.imageUrl.length})` : data.imageUrl;
+  }
+  console.log('updateBonus action called with id:', id);
+  console.log('updateBonus action called with data (imageUrl potentially summarized):', {
+    ...data,
+    imageUrl: loggedImageUrl,
+  });
+
   const validatedFields = bonusSchema.safeParse(data);
   if (!validatedFields.success) {
-    return { error: 'Invalid data.', message: validatedFields.error.flatten().fieldErrors._messages.join(', ') };
+    console.error('Validation failed for updateBonus:', validatedFields.error.flatten().fieldErrors);
+    return { error: 'Invalid data.', message: JSON.stringify(validatedFields.error.flatten().fieldErrors) };
   }
 
   try {
-    const bonusIndex = mockBonusesStore.findIndex(b => b._id === id);
-    if (bonusIndex === -1) {
-      return { error: 'Not found.', message: 'Bonus not found (mock).' };
+    const collection = await getBonusesCollection();
+    const bonusObjectId = toObjectId(id);
+
+    if (!bonusObjectId) {
+      console.error(`Invalid bonus ID format for update: ${id}`);
+      return { error: 'Invalid ID format.', message: 'Bonus ID is not a valid ObjectId format.' };
     }
-    mockBonusesStore[bonusIndex] = {
-      ...mockBonusesStore[bonusIndex],
+    
+    const updateData: Partial<BonusFormData> & { updatedAt: Date } = {
       ...validatedFields.data,
       updatedAt: new Date(),
     };
+
+    // Ensure _id, createdAt are not in $set
+    const {_id, createdAt, ...setValues} = updateData as any;
+
+
+    const result = await collection.updateOne(
+      { _id: bonusObjectId },
+      { $set: setValues }
+    );
+
+    if (result.matchedCount === 0) {
+      console.warn(`No bonus found with ID ${id} to update.`);
+      return { error: 'Not found.', message: 'Bonus not found. It may have been deleted.' };
+    }
+    // modifiedCount can be 0 if the data was identical, which is not an error.
+
     revalidatePath('/admin/bonuses');
     revalidatePath(`/admin/bonuses/edit/${id}`);
     revalidatePath('/');
-    return { success: true, message: 'Bonus updated successfully (mock).' };
+    revalidatePath('/promotions');
+
+    console.log(`Bonus with ID ${id} updated successfully. Matched: ${result.matchedCount}, Modified: ${result.modifiedCount}`);
+    return { success: true, message: 'Bonus updated successfully.' };
+
   } catch (e) {
-    console.error('Failed to update bonus (mock):', e);
-    return { error: 'Mock error.', message: 'Failed to update bonus (mock).' };
+    console.error('Failed to update bonus in _actions.ts catch block:', e);
+    let errorMessage = 'Failed to update bonus due to a server issue.';
+    if (e instanceof Error) {
+      errorMessage = e.message;
+    } else if (typeof e === 'string') {
+      errorMessage = e;
+    } else {
+      try {
+        errorMessage = `Non-Error exception: ${String(e)}`;
+      } catch (stringifyError) {
+        errorMessage = 'Failed to update bonus and could not stringify the error object.';
+      }
+    }
+    return { error: 'Database error.', message: errorMessage };
   }
 }
 
 export async function deleteBonus(id: string): Promise<BonusActionState> {
   try {
-    const initialLength = mockBonusesStore.length;
-    mockBonusesStore = mockBonusesStore.filter(b => b._id !== id);
-    if (mockBonusesStore.length === initialLength) {
-      return { error: 'Not found.', message: 'Bonus not found (mock).' };
+    const collection = await getBonusesCollection();
+    const bonusObjectId = toObjectId(id);
+
+    if (!bonusObjectId) {
+      return { error: 'Invalid ID format.', message: 'Bonus ID is not a valid ObjectId format.' };
     }
+
+    const result = await collection.deleteOne({ _id: bonusObjectId });
+
+    if (result.deletedCount === 0) {
+      return { error: 'Not found.', message: 'Bonus not found or already deleted.' };
+    }
+
     revalidatePath('/admin/bonuses');
     revalidatePath('/');
-    return { success: true, message: 'Bonus deleted successfully (mock).' };
+    revalidatePath('/promotions');
+    return { success: true, message: 'Bonus deleted successfully.' };
   } catch (e) {
-    console.error('Failed to delete bonus (mock):', e);
-    return { error: 'Mock error.', message: 'Failed to delete bonus (mock).' };
+    console.error('Failed to delete bonus:', e);
+    let errorMessage = 'Failed to delete bonus due to a server issue.';
+    if (e instanceof Error) {
+      errorMessage = e.message;
+    } else if (typeof e === 'string') {
+      errorMessage = e;
+    }
+    return { error: 'Database error.', message: errorMessage };
   }
 }
 
 export async function getBonuses(): Promise<Bonus[]> {
   try {
-    // Return a deep copy to prevent direct modification of the store
-    return JSON.parse(JSON.stringify(mockBonusesStore.sort((a,b) => b.createdAt.getTime() - a.createdAt.getTime())));
+    const collection = await getBonusesCollection();
+    const bonusesFromDB = await collection.find({}).sort({ createdAt: -1 }).toArray();
+    
+    return bonusesFromDB.map(bonus => ({
+      ...bonus,
+      _id: bonus._id.toHexString(), // Convert ObjectId to string
+      createdAt: new Date(bonus.createdAt), // Ensure Date type
+      updatedAt: new Date(bonus.updatedAt), // Ensure Date type
+    })) as unknown as Bonus[]; // Cast needed as Bonus expects string _id
   } catch (e) {
-    console.error('Failed to fetch bonuses (mock):', e);
+    console.error('Failed to fetch bonuses:', e);
     return [];
   }
 }
 
 export async function getBonusById(id: string): Promise<Bonus | null> {
   try {
-    const bonus = mockBonusesStore.find(b => b._id === id);
-    if (!bonus) return null;
-    // Return a deep copy
-    return JSON.parse(JSON.stringify(bonus));
+    const collection = await getBonusesCollection();
+    const bonusObjectId = toObjectId(id);
+
+    if (!bonusObjectId) {
+      console.error(`Invalid bonus ID format for getBonusById: ${id}`);
+      return null;
+    }
+
+    const bonusFromDB = await collection.findOne({ _id: bonusObjectId });
+
+    if (!bonusFromDB) {
+      return null;
+    }
+
+    return {
+      ...bonusFromDB,
+      _id: bonusFromDB._id.toHexString(),
+      createdAt: new Date(bonusFromDB.createdAt),
+      updatedAt: new Date(bonusFromDB.updatedAt),
+    }  as unknown as Bonus;
   } catch (e) {
-    console.error('Failed to fetch bonus by ID (mock):', e);
+    console.error('Failed to fetch bonus by ID:', e);
     return null;
   }
 }

@@ -11,12 +11,13 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
-import { BonusActionState } from '../_actions';
+import type { BonusActionState } from '../_actions';
 import Image from 'next/image';
 import { useState } from 'react';
+import * as z from 'zod';
 
 interface BonusFormProps {
-  initialData?: BonusFormData & { _id?: string };
+  initialData?: BonusFormData & { _id?: string }; // _id might not be part of form data schema but useful for context
   onSubmitAction: (data: BonusFormData) => Promise<BonusActionState>;
   submitButtonText?: string;
 }
@@ -46,37 +47,42 @@ export default function BonusForm({ initialData, onSubmitAction, submitButtonTex
       if (file.size > 2 * 1024 * 1024) { // 2MB limit for data URI preview
         toast({
           title: 'Image too large',
-          description: 'For direct preview, image should be less than 2MB. Please use a URL for larger images.',
+          description: 'For direct preview, image should be less than 2MB. Please use a URL for larger images or ensure server handles large uploads.',
           variant: 'destructive',
         });
         setPreviewImageUrl(null); 
-        form.setValue('imageUrl', ''); // Clear the value if too large
+        form.setValue('imageUrl', initialData?.imageUrl || ''); // Revert to initial or clear
         return;
       }
       const reader = new FileReader();
       reader.onloadend = () => {
         const dataUri = reader.result as string;
         setPreviewImageUrl(dataUri);
-        form.setValue('imageUrl', dataUri);
+        form.setValue('imageUrl', dataUri); // Update form value with data URI
       };
       reader.readAsDataURL(file);
     } else {
-       // If no file is selected (e.g., selection cancelled), try to use URL input for preview
       const urlValue = form.getValues('imageUrl');
       if (urlValue && z.string().url().safeParse(urlValue).success) {
         setPreviewImageUrl(urlValue);
-      } else {
-        setPreviewImageUrl(null);
+      } else if (!urlValue?.startsWith('data:image/')) { // If not a data URI either
+        setPreviewImageUrl(initialData?.imageUrl || null); // Revert to initial if no file and not a valid URL
       }
     }
   };
 
-  const handleImageUrlBlur = (event: React.FocusEvent<HTMLInputElement>) => {
+  const handleImageUrlInputChange = (event: React.FocusEvent<HTMLInputElement> | React.ChangeEvent<HTMLInputElement>) => {
     const url = event.target.value;
+    form.setValue('imageUrl', url); // Update RHF state
+
     if (url && z.string().url().safeParse(url).success) {
       setPreviewImageUrl(url);
-    } else if (!url.startsWith('data:image/')) { // Don't clear if it's a data URI
-      setPreviewImageUrl(null);
+    } else if (url && url.startsWith('data:image/')) {
+      // It's already a data URI, RHF is updated, preview will be set by handleImageChange or if pasted directly
+      setPreviewImageUrl(url);
+    }
+     else {
+      setPreviewImageUrl(null); // Clear preview if not a valid URL and not a data URI
     }
   };
 
@@ -91,18 +97,30 @@ export default function BonusForm({ initialData, onSubmitAction, submitButtonTex
           description: result.message || 'Bonus saved successfully.',
         });
         router.push('/admin/bonuses');
-        router.refresh(); // Ensure the list page is updated
+        router.refresh(); 
       } else {
         toast({
-          title: 'Error',
-          description: result.message || 'Failed to save bonus.',
+          title: 'Error Saving Bonus',
+          description: result.message || 'Failed to save bonus. Please check the details.',
           variant: 'destructive',
         });
       }
-    } catch (error) {
+    } catch (error: any) { // Catch as any to inspect properties
+      console.error("BonusForm onSubmit caught error:", error);
+      let description = 'An unexpected client-side error occurred.';
+      if (error instanceof Error) {
+        description = error.message;
+      } else if (typeof error === 'string') {
+        description = error;
+      } else if (error && typeof error.toString === 'function' && error.toString() !== '[object Object]') {
+        description = error.toString();
+      } else {
+        // Attempt to get a message if it's an object with a message property (like from server action errors not fitting BonusActionState)
+        description = error?.message || 'An unknown error occurred. Check console for details.';
+      }
       toast({
         title: 'Error',
-        description: 'An unexpected error occurred.',
+        description: description,
         variant: 'destructive',
       });
     } finally {
@@ -157,35 +175,27 @@ export default function BonusForm({ initialData, onSubmitAction, submitButtonTex
         <FormField
           control={form.control}
           name="imageUrl"
-          render={({ field }) => (
+          render={({ field }) => ( // field here is from RHF for imageUrl
             <FormItem>
               <FormLabel>Image URL or Upload</FormLabel>
               <FormControl>
                 <Input 
-                  placeholder="https://example.com/image.png or paste Data URI" 
-                  {...field} 
-                  onBlur={handleImageUrlBlur}
-                  onChange={(e) => {
-                    field.onChange(e); // RHF's onChange
-                    // If it's not a data URI starting, try to set preview from URL
-                    if (!e.target.value.startsWith('data:image/')) {
-                       if (z.string().url().safeParse(e.target.value).success) {
-                         setPreviewImageUrl(e.target.value);
-                       } else {
-                         setPreviewImageUrl(null);
-                       }
-                    }
-                  }}
+                  placeholder="Paste image URL or Data URI, or use upload button" 
+                  {...field} // RHF handles value and onChange for this input
+                  onChange={handleImageUrlInputChange} // Custom handler for URL/DataURI paste
+                  onBlur={handleImageUrlInputChange}   // Also on blur for URL validation
                 />
               </FormControl>
               <FormDescription>
-                Enter a direct image URL, or use the button below to upload an image (max 2MB for preview).
+                Enter a direct image URL, paste a Data URI, or use the button below to upload an image (max 2MB for preview).
               </FormDescription>
                <Input
                   type="file"
                   accept="image/*"
                   className="mt-2"
-                  onChange={handleImageChange}
+                  // This input is for file selection only, does not directly bind to RHF's imageUrl field's value
+                  // RHF's imageUrl is updated by handleImageChange via form.setValue
+                  onChange={handleImageChange} 
                 />
               <FormMessage />
             </FormItem>
@@ -195,18 +205,18 @@ export default function BonusForm({ initialData, onSubmitAction, submitButtonTex
         {previewImageUrl && (
           <div className="mt-4 space-y-2">
             <FormLabel>Image Preview</FormLabel>
-            <Image
-              src={previewImageUrl}
-              alt="Bonus image preview"
-              width={200}
-              height={125}
-              className="rounded-md border object-contain aspect-video"
-              onError={() => {
-                // This could happen if the URL is invalid or image fails to load
-                setPreviewImageUrl(null); 
-                toast({ title: 'Preview Error', description: 'Could not load image preview from the URL.', variant: 'destructive'});
-              }}
-            />
+            <div className="w-full max-w-xs h-auto aspect-video relative">
+              <Image
+                src={previewImageUrl}
+                alt="Bonus image preview"
+                fill
+                className="rounded-md border object-contain"
+                onError={() => {
+                  setPreviewImageUrl(null); 
+                  toast({ title: 'Preview Error', description: 'Could not load image preview from the source.', variant: 'destructive'});
+                }}
+              />
+            </div>
           </div>
         )}
 
