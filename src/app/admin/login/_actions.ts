@@ -10,7 +10,7 @@ const ADMIN_PASSWORD_COOKIE_NAME = 'sohoz88_admin_auth';
 
 export type LoginFormState = {
   error?: string;
-  success?: boolean;
+  success?: boolean; // Remains for error state, but success will redirect
 };
 
 export async function login(
@@ -32,8 +32,15 @@ export async function login(
       maxAge: 60 * 60 * 24 * 7, // 1 week
       path: '/',
     });
-    // Redirect handled by client-side after form submission success
-    return { success: true };
+
+    const submittedRedirectPath = formData.get('redirectPath') as string | null;
+    const targetPath = submittedRedirectPath && submittedRedirectPath.startsWith('/') ? submittedRedirectPath : '/admin';
+    
+    redirect(targetPath); // Perform server-side redirect
+
+    // Note: redirect() throws a NEXT_REDIRECT error, so code below is unreachable.
+    // This satisfies the type signature if other paths didn't redirect.
+    // return { success: true }; 
   } else {
     return { error: 'Incorrect password.' };
   }

@@ -23,22 +23,20 @@ function SubmitButton() {
 }
 
 export default function LoginPage() {
-  const router = useRouter();
   const searchParams = useSearchParams();
+  // redirectPath is determined on the client and passed to the server action via hidden input
   const redirectPath = searchParams.get('redirect') || '/admin';
 
   const initialState: LoginFormState = {};
   const [state, formAction] = useFormState(login, initialState);
 
   useEffect(() => {
-    if (state.success) {
-      toast({ title: 'Login Successful', description: 'Redirecting to dashboard...' });
-      router.push(redirectPath);
-    }
-    if (state.error) {
+    // Redirection on success is now handled by the server action.
+    // Client-side only needs to handle error messages.
+    if (state?.error) {
       toast({ title: 'Login Failed', description: state.error, variant: 'destructive' });
     }
-  }, [state, router, redirectPath]);
+  }, [state]);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-muted/30 p-4">
@@ -56,10 +54,12 @@ export default function LoginPage() {
               <Label htmlFor="password">Password</Label>
               <Input id="password" name="password" type="password" required />
             </div>
+            {/* Pass the redirectPath to the server action */}
+            <input type="hidden" name="redirectPath" value={redirectPath} />
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
             <SubmitButton />
-            {state.error && <p className="text-sm text-destructive">{state.error}</p>}
+            {state?.error && <p className="text-sm text-destructive">{state.error}</p>}
           </CardFooter>
         </form>
       </Card>
