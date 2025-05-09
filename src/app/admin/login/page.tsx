@@ -1,8 +1,8 @@
 'use client';
 
-import { useFormState, useFormStatus } from 'react-dom';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect } from 'react';
+import { useActionState, useEffect } from 'react';
+import { useFormStatus } from 'react-dom';
+import { useSearchParams } from 'next/navigation';
 import { login, LoginFormState } from './_actions';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -28,7 +28,7 @@ export default function LoginPage() {
   const redirectPath = searchParams.get('redirect') || '/admin';
 
   const initialState: LoginFormState = {};
-  const [state, formAction] = useFormState(login, initialState);
+  const [state, formAction] = useActionState(login, initialState);
 
   useEffect(() => {
     // Redirection on success is now handled by the server action.
