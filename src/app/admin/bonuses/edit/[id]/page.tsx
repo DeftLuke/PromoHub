@@ -1,6 +1,6 @@
 import BonusForm from '../../_components/bonus-form';
 import { getBonusById, updateBonus } from '../../_actions';
-import type { Bonus, BonusFormData } from '@/schemas/bonus';
+import type { Bonus, BonusFormData, BonusActionState } from '@/schemas/bonus';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertTriangle } from "lucide-react"
@@ -12,7 +12,7 @@ interface EditBonusPageProps {
 }
 
 export default async function EditBonusPage({ params }: EditBonusPageProps) {
-  const bonus = await getBonusById(params.id) as Bonus | null;
+  const bonus = await getBonusById(params.id);
 
   if (!bonus) {
     return (
@@ -37,9 +37,10 @@ export default async function EditBonusPage({ params }: EditBonusPageProps) {
     isActive: bonus.isActive,
   };
   
-  const handleUpdateBonus = async (data: BonusFormData) => {
-    return updateBonus(params.id, data);
-  };
+  // The updateBonus action needs the id, which we get from params.
+  // We bind the id to the updateBonus server action.
+  // The BonusForm will call this bound action with just the form data.
+  const boundUpdateBonusAction = updateBonus.bind(null, params.id);
 
   return (
     <div className="space-y-8">
@@ -55,7 +56,7 @@ export default async function EditBonusPage({ params }: EditBonusPageProps) {
         <CardContent>
             <BonusForm
                 initialData={initialFormData}
-                onSubmitAction={handleUpdateBonus}
+                onSubmitAction={boundUpdateBonusAction}
                 submitButtonText="Update Bonus"
             />
         </CardContent>
