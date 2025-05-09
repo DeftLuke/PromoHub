@@ -1,22 +1,22 @@
+
 'use server';
 
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { siteSettingsSchema, SiteSettingsFormData, SiteSettings } from '@/schemas/settings';
-import clientPromise from '@/lib/mongodb';
-import type { Collection, ObjectId }from 'mongodb';
+import clientPromise, { DB_NAME } from '@/lib/mongodb'; // Import DB_NAME
+import type { Collection } from 'mongodb'; // ObjectId is not explicitly used here with string ID
 
-const DB_NAME = process.env.MONGODB_DB_NAME;
+// const DB_NAME = process.env.MONGODB_DB_NAME; // Replaced by import
 const SETTINGS_COLLECTION = process.env.SETTINGS_COLLECTION_NAME || 'siteSettings';
-const SITE_SETTINGS_DOC_ID = 'global_settings'; // Use a fixed string ID for the single settings document
+const SITE_SETTINGS_DOC_ID = 'global_settings'; 
 
 async function getSettingsCollection(): Promise<Collection<Omit<SiteSettings, '_id' | 'updatedAt'> & { _id: string; updatedAt: Date }>> {
   if (!DB_NAME) {
-    throw new Error('MongoDB DB_NAME is not configured in environment variables.');
+    throw new Error('MongoDB DB_NAME is not configured.');
   }
   const client = await clientPromise;
   const db = client.db(DB_NAME);
-  // The collection stores documents with _id as string (SITE_SETTINGS_DOC_ID)
   return db.collection(SETTINGS_COLLECTION);
 }
 
@@ -32,18 +32,15 @@ export async function getSiteSettings(): Promise<SiteSettingsFormData | null> {
     const settingsDoc = await collection.findOne({ _id: SITE_SETTINGS_DOC_ID });
 
     if (settingsDoc) {
-      // Destructure to ensure only fields from SiteSettingsFormData are returned
       const { backgroundType, backgroundValue } = settingsDoc;
       return { backgroundType, backgroundValue };
     }
-    // Return default settings if nothing is found in the DB
     return { 
         backgroundType: 'color',
-        backgroundValue: '#E0F2FE', // Default light blue background
+        backgroundValue: '#E0F2FE', 
       };
   } catch (e) {
     console.error('Failed to fetch site settings:', e);
-    // Fallback default in case of error
     return { 
         backgroundType: 'color',
         backgroundValue: '#E0F2FE',
@@ -67,11 +64,11 @@ export async function updateSiteSettings(data: SiteSettingsFormData): Promise<Se
     await collection.updateOne(
       { _id: SITE_SETTINGS_DOC_ID },
       { $set: settingsToUpdate },
-      { upsert: true } // Create the document if it doesn't exist
+      { upsert: true } 
     );
 
     revalidatePath('/admin/settings');
-    revalidatePath('/'); // Revalidate all pages that might use site settings
+    revalidatePath('/'); 
     return { success: true, message: 'Site settings updated successfully.' };
   } catch (e) {
     console.error('Failed to update site settings:', e);
@@ -84,3 +81,4 @@ export async function updateSiteSettings(data: SiteSettingsFormData): Promise<Se
     return { error: 'Database error.', message: errorMessage };
   }
 }
+

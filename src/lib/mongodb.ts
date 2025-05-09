@@ -14,7 +14,7 @@ let toObjectIdExport: (id: string) => ObjectIdType;
 
 // --- Environment Variables ---
 const MONGODB_URI_FROM_ENV = process.env.MONGODB_URI;
-const DB_NAME = process.env.MONGODB_DB_NAME;
+const DB_NAME_FROM_ENV = process.env.MONGODB_DB_NAME;
 
 // --- Mock Implementation Details ---
 interface MockCursor {
@@ -43,6 +43,7 @@ interface MockMongoClient {
   db(dbName?: string): MockDb;
   connect(): Promise<MockMongoClient>;
   close(): Promise<void>;
+  admin(): { ping(): Promise<{ ok: 1 }> };
 }
 
 const mockDataStore: { [collectionName: string]: any[] } = {
@@ -57,14 +58,16 @@ const mockCursorOperations = (initialData: any[]): MockCursor => {
 
     const cursor: MockCursor = {
         sort: (sortOptions?: any) => {
-            if (sortOptions && currentData.length > 0) {
+            if (sortOptions && currentData.length > 0 && Object.keys(sortOptions).length > 0) {
                 const sortKey = Object.keys(sortOptions)[0];
-                const sortDir = sortOptions[sortKey];
-                currentData.sort((a, b) => {
-                    if (a[sortKey] < b[sortKey]) return sortDir === 1 ? -1 : 1;
-                    if (a[sortKey] > b[sortKey]) return sortDir === 1 ? 1 : -1;
-                    return 0;
-                });
+                if (sortKey in currentData[0]) { // Check if sortKey exists
+                    const sortDir = sortOptions[sortKey];
+                    currentData.sort((a, b) => {
+                        if (a[sortKey] < b[sortKey]) return sortDir === 1 ? -1 : 1;
+                        if (a[sortKey] > b[sortKey]) return sortDir === 1 ? 1 : -1;
+                        return 0;
+                    });
+                }
             }
             return cursor;
         },
@@ -166,7 +169,6 @@ function createMockCollection(collectionName: string): MockCollection {
                 })
             );
         }
-        // Add more pipeline stage mocks if needed (e.g., $group, $sort within aggregate)
         return mockCursorOperations(results) as MockAggregationCursor;
     },
     countDocuments: async (query?: any): Promise<number> => {
@@ -187,6 +189,9 @@ const initializeMockDbAndGlobals = (): Promise<MockMongoClient> => {
     }),
     connect: async () => mockMongoClientInstance,
     close: async () => {},
+    admin: () => ({ // Add mock admin().ping()
+      ping: async () => ({ ok: 1 }),
+    }),
   };
   
   ObjectIdExport = function MockObjectIdFunc(id?: string | number | Buffer | RealObjectIdType): string {
@@ -208,7 +213,7 @@ if (SHOULD_USE_MOCK_DB_INITIALLY) {
   try {
     const { MongoClient: ActualMongoClient, ServerApiVersion: ActualServerApiVersion, ObjectId: ActualObjectId } = require('mongodb');
 
-    if (!DB_NAME) {
+    if (!DB_NAME_FROM_ENV) {
       throw new Error('MONGODB_URI is set, but MONGODB_DB_NAME is not. Both are required for real MongoDB connection. Please check your .env.local file.');
     }
     if (!(MONGODB_URI_FROM_ENV.startsWith("mongodb://") || MONGODB_URI_FROM_ENV.startsWith("mongodb+srv://"))) {
@@ -223,22 +228,33 @@ if (SHOULD_USE_MOCK_DB_INITIALLY) {
         version: ActualServerApiVersion.v1,
         strict: true,
         deprecationErrors: true,
-      } as any,
+      } as any, // Cast to any to satisfy ServerApi type if needed, or ensure version matches installed mongodb
       serverSelectionTimeoutMS: 5000, // Fail fast if server is not reachable
       connectTimeoutMS: 5000,
     });
     
     clientPromiseInternal = client.connect()
-      .then(connectedClient => {
-        console.log("Successfully connected to Real MongoDB.");
-        ObjectIdExport = ActualObjectId as any; // Assign real ObjectId
-        toObjectIdExport = (id: string): RealObjectIdType => new ActualObjectId(id); // Use real ObjectId conversion
-        return connectedClient as RealMongoClient;
+      .then(async connectedClient => {
+        try {
+          await connectedClient.db(DB_NAME_FROM_ENV).admin().ping(); // Ping after connect
+          console.log("Successfully connected to Real MongoDB and ping was successful.");
+          ObjectIdExport = ActualObjectId as any; 
+          toObjectIdExport = (id: string): RealObjectIdType => new ActualObjectId(id); 
+          return connectedClient as RealMongoClient;
+        } catch (pingErr: any) {
+          const uriToLog = MONGODB_URI_FROM_ENV.substring(0, MONGODB_URI_FROM_ENV.indexOf('@') > 0 ? MONGODB_URI_FROM_ENV.indexOf('@') : MONGODB_URI_FROM_ENV.length);
+          console.warn(`Real MongoDB connected but ping failed (URI: ${uriToLog}, DB: ${DB_NAME_FROM_ENV}, Ping Error: ${pingErr.message}). Falling back to MOCK MongoDB implementation.`);
+          await connectedClient.close().catch(closeErr => console.error("Error closing client during ping fallback:", closeErr));
+          return initializeMockDbAndGlobals(); // Return promise resolving to MockMongoClient
+        }
       })
-      .catch(err => {
+      .catch(connectErr => {
         const uriToLog = MONGODB_URI_FROM_ENV.substring(0, MONGODB_URI_FROM_ENV.indexOf('@') > 0 ? MONGODB_URI_FROM_ENV.indexOf('@') : MONGODB_URI_FROM_ENV.length);
-        console.warn(`Real MongoDB connection failed (URI: ${uriToLog}, Error: ${err.message}). Falling back to MOCK MongoDB implementation.`);
-        return initializeMockDbAndGlobals(); // Fallback sets mock globals and returns Promise<MockMongoClient>
+        console.warn(`Real MongoDB connection attempt failed (URI: ${uriToLog}, Error: ${connectErr.message}). Falling back to MOCK MongoDB implementation.`);
+        if (client && typeof client.close === 'function') {
+            client.close().catch(closeErr => console.error("Error closing client during connect fallback:", closeErr));
+        }
+        return initializeMockDbAndGlobals(); // Return promise resolving to MockMongoClient
       });
 
   } catch (e: any) {
@@ -250,5 +266,10 @@ if (SHOULD_USE_MOCK_DB_INITIALLY) {
 export default clientPromiseInternal;
 export { ObjectIdExport as ObjectId, toObjectIdExport as toObjectId };
 
+// Ensuring DB_NAME is exported for use in other modules, defaulting if mock is used or not set.
+export const DB_NAME = DB_NAME_FROM_ENV || 'mock_sohoz88_db';
+
+
 export type Collection<T extends Document = Document> = RealCollectionType<T>;
 export type { FindCursor as AppFindCursor, AggregationCursor as AppAggregationCursor };
+

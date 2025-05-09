@@ -1,17 +1,18 @@
+
 'use server';
 
 import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { bonusSchema, BonusFormData, Bonus } from '@/schemas/bonus';
-import clientPromise, { toObjectId } from '@/lib/mongodb';
+import clientPromise, { toObjectId, DB_NAME } from '@/lib/mongodb'; // Import DB_NAME
 import type { Collection, ObjectId } from 'mongodb';
 
-const DB_NAME = process.env.MONGODB_DB_NAME;
+// const DB_NAME = process.env.MONGODB_DB_NAME; // Replaced by import
 const BONUSES_COLLECTION = process.env.BONUSES_COLLECTION_NAME || 'bonuses';
 
 async function getBonusesCollection(): Promise<Collection<Omit<Bonus, '_id' | 'createdAt' | 'updatedAt'> & { _id: ObjectId; createdAt: Date; updatedAt: Date }>> {
-  if (!DB_NAME) {
-    throw new Error('MongoDB DB_NAME is not configured in environment variables.');
+  if (!DB_NAME) { // DB_NAME is now imported and will have a default if mock is used
+    throw new Error('MongoDB DB_NAME is not configured.');
   }
   const client = await clientPromise;
   const db = client.db(DB_NAME);
@@ -22,7 +23,7 @@ export type BonusActionState = {
   error?: string;
   success?: boolean;
   message?: string;
-  bonusId?: string; // Changed from ObjectId to string for client consumption
+  bonusId?: string; 
 };
 
 export async function createBonus(data: BonusFormData): Promise<BonusActionState> {
@@ -35,12 +36,12 @@ export async function createBonus(data: BonusFormData): Promise<BonusActionState
     const collection = await getBonusesCollection();
     const newBonusDocument = {
       ...validatedFields.data,
-      _id: new ObjectId(), // Generate ObjectId here
+      _id: new ObjectId(), 
       createdAt: new Date(),
       updatedAt: new Date(),
     };
     
-    const result = await collection.insertOne(newBonusDocument as any); // Cast because our collection type expects _id to be ObjectId, but newBonusDocument's _id is type ObjectId already
+    const result = await collection.insertOne(newBonusDocument as any); 
 
     revalidatePath('/admin/bonuses');
     revalidatePath('/'); 
@@ -90,7 +91,6 @@ export async function updateBonus(id: string, data: BonusFormData): Promise<Bonu
       updatedAt: new Date(),
     };
 
-    // Ensure _id, createdAt are not in $set
     const {_id, createdAt, ...setValues} = updateData as any;
 
 
@@ -103,7 +103,6 @@ export async function updateBonus(id: string, data: BonusFormData): Promise<Bonu
       console.warn(`No bonus found with ID ${id} to update.`);
       return { error: 'Not found.', message: 'Bonus not found. It may have been deleted.' };
     }
-    // modifiedCount can be 0 if the data was identical, which is not an error.
 
     revalidatePath('/admin/bonuses');
     revalidatePath(`/admin/bonuses/edit/${id}`);
@@ -165,14 +164,16 @@ export async function deleteBonus(id: string): Promise<BonusActionState> {
 export async function getBonuses(): Promise<Bonus[]> {
   try {
     const collection = await getBonusesCollection();
+    // The mock implementation's find returns a MockCursor which has sort.
+    // The real MongoDB find also returns a cursor with sort.
     const bonusesFromDB = await collection.find({}).sort({ createdAt: -1 }).toArray();
     
     return bonusesFromDB.map(bonus => ({
       ...bonus,
-      _id: bonus._id.toHexString(), // Convert ObjectId to string
-      createdAt: new Date(bonus.createdAt), // Ensure Date type
-      updatedAt: new Date(bonus.updatedAt), // Ensure Date type
-    })) as unknown as Bonus[]; // Cast needed as Bonus expects string _id
+      _id: bonus._id.toHexString ? bonus._id.toHexString() : String(bonus._id), // Handle mock _id (string) and real _id (ObjectId)
+      createdAt: new Date(bonus.createdAt), 
+      updatedAt: new Date(bonus.updatedAt), 
+    })) as unknown as Bonus[]; 
   } catch (e) {
     console.error('Failed to fetch bonuses:', e);
     return [];
@@ -197,7 +198,7 @@ export async function getBonusById(id: string): Promise<Bonus | null> {
 
     return {
       ...bonusFromDB,
-      _id: bonusFromDB._id.toHexString(),
+      _id: bonusFromDB._id.toHexString ? bonusFromDB._id.toHexString() : String(bonusFromDB._id),
       createdAt: new Date(bonusFromDB.createdAt),
       updatedAt: new Date(bonusFromDB.updatedAt),
     }  as unknown as Bonus;
@@ -206,3 +207,4 @@ export async function getBonusById(id: string): Promise<Bonus | null> {
     return null;
   }
 }
+
