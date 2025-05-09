@@ -28,8 +28,8 @@ const noto_sans_bengali = Noto_Sans_Bengali({
 });
 
 export const metadata: Metadata = {
-  title: 'Sohoz88 Promo Hub | সেরা প্রোমোশন ও অফার',
-  description: 'সোহজ৮৮ এর আকর্ষণীয় প্রোমোশন, বোনাস এবং কিভাবে সহজেই জয়েন করবেন তা জানুন। আজই যোগ দিন!',
+  title: 'Bajibuz Promo Hub | সেরা প্রোমোশন ও অফার',
+  description: 'Bajibuz এর আকর্ষণীয় প্রোমোশন, বোনাস এবং কিভাবে সহজেই জয়েন করবেন তা জানুন। আজই যোগ দিন!',
 };
 
 export default async function RootLayout({
