@@ -1,11 +1,17 @@
 // src/lib/mongodb.ts
 import { MongoClient, ServerApiVersion, ObjectId } from 'mongodb';
 
-if (!process.env.MONGODB_URI) {
-  throw new Error('Invalid/Missing environment variable: "MONGODB_URI"');
+const MONGODB_URI = process.env.MONGODB_URI;
+
+if (!MONGODB_URI || MONGODB_URI.trim() === '') {
+  throw new Error('Invalid/Missing environment variable: "MONGODB_URI". Please ensure it is set in your .env.local file and is not empty.');
 }
 
-const uri = process.env.MONGODB_URI;
+if (!MONGODB_URI.startsWith('mongodb://') && !MONGODB_URI.startsWith('mongodb+srv://')) {
+  throw new Error('Invalid MONGODB_URI scheme. Expected connection string to start with "mongodb://" or "mongodb+srv://". Please check your .env.local file.');
+}
+
+const uri = MONGODB_URI;
 const options = {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -45,3 +51,4 @@ export const toObjectId = (id: string): ObjectId => {
   }
   return new ObjectId(id);
 };
+
