@@ -3,13 +3,10 @@
 import { z } from 'zod';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
+import { loginSchema } from '@/schemas/login';
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'sohoz88admin';
 const ADMIN_PASSWORD_COOKIE_NAME = 'sohoz88_admin_auth';
-
-export const loginSchema = z.object({
-  password: z.string().min(1, 'Password is required'),
-});
 
 export type LoginFormState = {
   error?: string;
