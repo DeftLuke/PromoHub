@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useActionState, useEffect } from 'react';
+import { useActionState, useEffect } from 'react'; // Changed from useFormState in a previous step
 import { useFormStatus } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
 import { login, LoginFormState } from './_actions';
@@ -24,18 +25,19 @@ function SubmitButton() {
 
 export default function LoginPage() {
   const searchParams = useSearchParams();
-  // redirectPath is determined on the client and passed to the server action via hidden input
+  // redirectPath is determined on the client from URL search param.
+  // It's available if we want to pass it to the server action in the future,
+  // but currently, the server action redirects to a fixed /admin path.
   const redirectPath = searchParams.get('redirect') || '/admin';
 
   const initialState: LoginFormState = {};
   const [state, formAction] = useActionState(login, initialState);
 
   useEffect(() => {
-    // Redirection on success is now handled by the server action.
-    // Client-side only needs to handle error messages.
     if (state?.error) {
-      toast({ title: 'Login Failed', description: state.error, variant: 'destructive' });
+      toast({ title: 'লগইন ব্যর্থ হয়েছে', description: state.error, variant: 'destructive' }); // "Login Failed"
     }
+    // Successful login and redirect is handled by the server action.
   }, [state]);
 
   return (
@@ -45,24 +47,29 @@ export default function LoginPage() {
           <div className="mx-auto mb-4">
             <SiteLogo />
           </div>
-          <CardTitle className="text-2xl">Admin Login</CardTitle>
-          <CardDescription>Enter your password to access the Sohoz88 dashboard.</CardDescription>
+          <CardTitle className="text-2xl">অ্যাডমিন লগইন</CardTitle> {/* Admin Login */}
+          <CardDescription>Sohoz88 ড্যাশবোর্ড অ্যাক্সেস করতে আপনার পাসওয়ার্ড লিখুন।</CardDescription> {/* Enter your password to access the Sohoz88 dashboard. */}
         </CardHeader>
         <form action={formAction}>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">পাসওয়ার্ড</Label> {/* Password */}
               <Input id="password" name="password" type="password" required />
             </div>
-            {/* Pass the redirectPath to the server action */}
-            <input type="hidden" name="redirectPath" value={redirectPath} />
+            {/* 
+              The hidden input for redirectPath is removed as the server action 
+              now redirects to a fixed '/admin' path.
+              If dynamic redirect is re-enabled in the server action, this can be added back:
+              <input type="hidden" name="redirectPath" value={redirectPath} /> 
+            */}
           </CardContent>
           <CardFooter className="flex flex-col gap-4">
             <SubmitButton />
-            {state?.error && <p className="text-sm text-destructive">{state.error}</p>}
+            {/* Error messages are now shown via toast */}
           </CardFooter>
         </form>
       </Card>
     </div>
   );
 }
+
