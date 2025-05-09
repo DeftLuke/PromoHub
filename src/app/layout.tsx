@@ -1,3 +1,4 @@
+
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import { Noto_Sans_Bengali } from 'next/font/google';
@@ -6,6 +7,8 @@ import { Toaster } from '@/components/ui/toaster';
 import SiteHeader from '@/components/layout/site-header';
 import SiteFooter from '@/components/layout/site-footer';
 import { getSiteSettings } from '@/app/admin/settings/_actions'; // Import the action
+
+export const dynamic = 'force-dynamic';
 
 const geistSans = Geist({
   variable: '--font-geist-sans',
